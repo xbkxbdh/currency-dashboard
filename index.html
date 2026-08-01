@@ -375,29 +375,33 @@
     // ═══════════════════════════════════════════════
 
     async function fetchData() {
-      // Try direct first, then CORS proxy
-      const direct = 'https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/';
-      const proxy = 'https://corsproxy.org/?url=';
+      // Fetch from GitHub-hosted data.json (no CORS issues)
+      const urls = [
+        'data.json',
+        'https://raw.githubusercontent.com/xbkxbdh/currency-dashboard/main/data.json',
+        'https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/',
+      ];
 
-      for (const url of [direct, proxy + encodeURIComponent(direct)]) {
+      for (const url of urls) {
         try {
           const res = await fetch(url);
           if (!res.ok) continue;
           const json = await res.json();
+          // data.json wraps in { currencies: {...} }, direct API too
+          const data = json.currencies || json;
           STATE.timestamp = json.timestamp || null;
-          return json.currencies || {};
+          if (data && Object.keys(data).length > 0) return data;
         } catch (e) {
-          console.log('Attempt failed:', url.split('?')[0].slice(0, 30) + '...');
+          console.log('Attempt failed:', url.split('?')[0].slice(0, 40));
         }
       }
 
-      // Both failed
       const tbody = document.getElementById('tableBody');
       if (tbody) {
         tbody.innerHTML = `<div class="px-6 py-8 text-center" style="color:var(--red);">
           <div class="text-lg mb-2">⚠️</div>
           <div>${t('error')}</div>
-          <div class="text-xs mt-2" style="color:var(--text-dim);">Install "CORS Unblock" browser extension, or try a different network.</div>
+          <div class="text-xs mt-2" style="color:var(--text-dim);">Waiting for data to sync via GitHub Actions...</div>
         </div>`;
       }
       return null;

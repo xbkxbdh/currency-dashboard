@@ -1,0 +1,23 @@
+name: Fetch Tabdeal Data
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch API data
+        run: |
+          curl -s "https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/" -o data.json
+          echo "Fetched $(cat data.json | wc -c) bytes"
+      - name: Commit data
+        run: |
+          git config user.email "bot@tabdeal-dashboard.com"
+          git config user.name "Tabdeal Bot"
+          git add data.json
+          git diff --staged --quiet || git commit -m "Update data.json [skip ci]"
+          git push
