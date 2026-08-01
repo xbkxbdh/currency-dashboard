@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tabdeal | Real-Time Currency Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* ── CSS Variables ── */
+    :root[data-theme="dark"] {
+      --bg: #0f1118;
+      --bg-card: #181b25;
+      --bg-card-hover: #1e2230;
+      --bg-input: #1a1d29;
+      --border: #262a3a;
+      --text: #e8eaed;
+      --text-muted: #8b8fa3;
+      --text-dim: #555a6e;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.15);
+      --green: #22c55e;
+      --red: #ef4444;
+      --green-bg: rgba(34,197,94,0.08);
+      --red-bg: rgba(239,68,68,0.08);
+      --shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+    :root[data-theme="light"] {
+      --bg: #f5f6fa;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f0f2f8;
+      --bg-input: #eef0f5;
+      --border: #e2e4ea;
+      --text: #1a1d29;
+      --text-muted: #6b7084;
+      --text-dim: #9ca0b0;
+      --accent: #2563eb;
+      --accent-glow: rgba(37,99,235,0.1);
+      --green: #16a34a;
+      --red: #dc2626;
+      --green-bg: rgba(22,163,74,0.08);
+      --red-bg: rgba(220,38,38,0.08);
+      --shadow: 0 4px 24px rgba(0,0,0,0.06);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.3s, color 0.3s;
+    }
+    body[dir="rtl"] {
+      font-family: 'Vazirmatn', 'Inter', -apple-system, sans-serif;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Sparkline canvas ── */
+    .sparkline { width: 120px; height: 32px; }
+    .sparkline canvas { width: 100%; height: 100%; display: block; }
+
+    /* ── Animations ── */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    @keyframes slide-up {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-in { animation: slide-up 0.3s ease forwards; }
+
+    /* ── Price flash ── */
+    .flash-green { animation: flash-green 0.6s ease; }
+    .flash-red { animation: flash-red 0.6s ease; }
+    @keyframes flash-green { 0% { background: rgba(34,197,94,0.2); } 100% { background: transparent; } }
+    @keyframes flash-red { 0% { background: rgba(239,68,68,0.2); } 100% { background: transparent; } }
+
+    /* ── Table rows ── */
+    .currency-row {
+      transition: background 0.2s;
+      animation: slide-up 0.3s ease forwards;
+    }
+    .currency-row:hover { background: var(--bg-card-hover) !important; }
+
+    /* ── Fade-in stagger ── */
+    .stagger-1 { animation-delay: 0.02s; }
+    .stagger-2 { animation-delay: 0.04s; }
+    .stagger-3 { animation-delay: 0.06s; }
+
+    /* ── Loading skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ── Toolbar responsive ── */
+    @media (max-width: 640px) {
+      .toolbar-wrap { flex-direction: column; align-items: stretch; }
+      .sparkline { width: 80px; height: 24px; }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ════════════════════════════════════════════ -->
+  <!--  TOP NAVBAR                                -->
+  <!-- ════════════════════════════════════════════ -->
+  <header class="sticky top-0 z-50" style="background:var(--bg);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
+      <!-- Left: Logo -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold" style="background:var(--accent);color:#fff;">T</div>
+        <span class="text-base sm:text-lg font-semibold hidden sm:inline" data-i18n="title">Tabdeal Dashboard</span>
+        <span class="text-base font-semibold sm:hidden">TD</span>
+      </div>
+
+      <!-- Center: Controls -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Language Toggle -->
+        <button id="langToggle" class="px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all" style="background:var(--bg-input);color:var(--text-muted);border:1px solid var(--border);" data-lang="en">
+          EN / FA
+        </button>
+
+        <!-- Theme Toggle -->
+        <button id="themeToggle" class="w-8 h-8 flex items-center justify-center rounded-lg transition-all text-sm" style="background:var(--bg-input);color:var(--text-muted);border:1px solid var(--border);" title="Toggle theme">
+          <span id="themeIcon">🌙</span>
+        </button>
+
+        <!-- Quote Toggle -->
+        <button id="quoteToggle" class="px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all" style="background:var(--bg-input);color:var(--text-muted);border:1px solid var(--border);">
+          USDT / IRT
+        </button>
+
+        <!-- Refresh Indicator -->
+        <div class="flex items-center gap-2 text-xs" style="color:var(--text-dim);">
+          <span id="liveDot" class="w-2 h-2 rounded-full" style="background:var(--green);animation:pulse-dot 2s infinite;"></span>
+          <span id="refreshInfo" class="hidden sm:inline" data-i18n="live">Live</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!--  MAIN CONTENT                              -->
+  <!-- ════════════════════════════════════════════ -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+
+    <!-- Stats Bar -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 sm:mb-6">
+      <div class="stat-card rounded-xl p-3 sm:p-4" style="background:var(--bg-card);border:1px solid var(--border);">
+        <div class="text-xs" style="color:var(--text-dim);" data-i18n="totalPairs">Total Pairs</div>
+        <div class="text-lg sm:text-xl font-bold mt-1" id="statTotal">—</div>
+      </div>
+      <div class="stat-card rounded-xl p-3 sm:p-4" style="background:var(--bg-card);border:1px solid var(--border);">
+        <div class="text-xs" style="color:var(--text-dim);" data-i18n="topGainer">Top Gainer</div>
+        <div class="text-lg sm:text-xl font-bold mt-1 truncate" id="statGainer" style="color:var(--green);">—</div>
+      </div>
+      <div class="stat-card rounded-xl p-3 sm:p-4" style="background:var(--bg-card);border:1px solid var(--border);">
+        <div class="text-xs" style="color:var(--text-dim);" data-i18n="topLoser">Top Loser</div>
+        <div class="text-lg sm:text-xl font-bold mt-1 truncate" id="statLoser" style="color:var(--red);">—</div>
+      </div>
+      <div class="stat-card rounded-xl p-3 sm:p-4" style="background:var(--bg-card);border:1px solid var(--border);">
+        <div class="text-xs" style="color:var(--text-dim);" data-i18n="updated">Updated</div>
+        <div class="text-sm font-bold mt-1" id="statUpdated">—</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar-wrap flex gap-3 mb-4">
+      <!-- Search -->
+      <div class="relative flex-1">
+        <input id="searchInput" type="text" class="w-full h-10 px-4 pr-10 rounded-xl text-sm outline-none transition-all" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);" placeholder="Search currency..." data-i18n-placeholder="searchPlaceholder" />
+        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm" style="color:var(--text-dim);">🔍</span>
+      </div>
+
+      <!-- Sort -->
+      <select id="sortSelect" class="h-10 px-3 rounded-xl text-sm outline-none transition-all" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text);">
+        <option value="name" data-i18n-opt="sortName">Name</option>
+        <option value="price" data-i18n-opt="sortPrice">Price</option>
+        <option value="change" data-i18n-opt="sortChange">24h Change</option>
+      </select>
+
+      <!-- Filter Favorites -->
+      <button id="favFilter" class="h-10 px-3 rounded-xl text-sm transition-all" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);">
+        <span id="favFilterIcon">☆</span>
+      </button>
+
+      <!-- Refresh button -->
+      <button id="refreshBtn" class="h-10 w-10 flex items-center justify-center rounded-xl text-sm transition-all" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);" title="Refresh now">
+        ↻
+      </button>
+    </div>
+
+    <!-- Table -->
+    <div class="rounded-xl overflow-hidden" style="background:var(--bg-card);border:1px solid var(--border);">
+      <!-- Table header -->
+      <div class="grid grid-cols-12 gap-2 px-4 sm:px-6 py-3 text-xs font-medium uppercase tracking-wider" style="color:var(--text-dim);border-bottom:1px solid var(--border);">
+        <div class="col-span-1 text-center">☆</div>
+        <div class="col-span-3 sm:col-span-2" data-i18n="currency">Currency</div>
+        <div class="col-span-4 sm:col-span-3 text-right" data-i18n="price">Price</div>
+        <div class="hidden sm:block sm:col-span-2 text-right" data-i18n="high">24h High</div>
+        <div class="hidden sm:block sm:col-span-2 text-right" data-i18n="low">24h Low</div>
+        <div class="col-span-4 sm:col-span-2 text-right" data-i18n="change">24h Change</div>
+      </div>
+
+      <!-- Table body -->
+      <div id="tableBody" class="divide-y" style="border-color:var(--border);">
+        <!-- Rows injected by JS -->
+      </div>
+    </div>
+
+    <!-- Load more -->
+    <div id="loadMoreWrap" class="text-center py-6 hidden">
+      <button id="loadMoreBtn" class="px-6 py-2.5 rounded-xl text-sm font-medium transition-all" style="background:var(--accent);color:#fff;" data-i18n="loadMore">
+        Load More
+      </button>
+    </div>
+  </main>
+
+  <script>
+    // ═══════════════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════════════
+
+    const STATE = {
+      currencies: {},       // full raw data
+      list: [],             // sorted array of { symbol, name, irt, usdt }
+      displayed: [],        // currently rendered rows
+      favorites: JSON.parse(localStorage.getItem('td_fav') || '[]'),
+      page: 0,
+      pageSize: 30,
+      quote: 'USDT',        // 'USDT' or 'IRT'
+      search: '',
+      sort: 'name',
+      lang: localStorage.getItem('td_lang') || 'en',
+      theme: localStorage.getItem('td_theme') || 'dark',
+      favFilter: false,
+      priceHistory: {},     // symbol -> [prices] for sparklines
+      intervalId: null,
+    };
+
+    // ═══════════════════════════════════════════════
+    //  I18N (English / Persian)
+    // ═══════════════════════════════════════════════
+
+    const LANG = {
+      en: {
+        title: 'Tabdeal Dashboard',
+        totalPairs: 'Total Pairs',
+        topGainer: 'Top Gainer',
+        topLoser: 'Top Loser',
+        updated: 'Updated',
+        searchPlaceholder: 'Search currency...',
+        sortName: 'Name',
+        sortPrice: 'Price',
+        sortChange: '24h Change',
+        loadMore: 'Load More',
+        live: 'Live',
+        currency: 'Currency',
+        price: 'Price',
+        high: '24h High',
+        low: '24h Low',
+        change: '24h Change',
+        noResults: 'No currencies found',
+        loading: 'Loading...',
+        error: 'Failed to load data',
+      },
+      fa: {
+        title: 'داشبورد تابدیل',
+        totalPairs: 'تعداد ارزها',
+        topGainer: 'بیشترین رشد',
+        topLoser: 'بیشترین کاهش',
+        updated: 'بروزرسانی',
+        searchPlaceholder: 'جستجوی ارز...',
+        sortName: 'نام',
+        sortPrice: 'قیمت',
+        sortChange: 'تغییر ۲۴ ساعته',
+        loadMore: 'نمایش بیشتر',
+        live: 'آنلاین',
+        currency: 'ارز',
+        price: 'قیمت',
+        high: 'بیشترین ۲۴h',
+        low: 'کمترین ۲۴h',
+        change: 'تغییر ۲۴h',
+        noResults: 'ارزی یافت نشد',
+        loading: 'در حال بارگذاری...',
+        error: 'خطا در دریافت اطلاعات',
+      }
+    };
+
+    function t(key) {
+      return LANG[STATE.lang]?.[key] || LANG.en[key] || key;
+    }
+
+    function applyLang() {
+      const dir = STATE.lang === 'fa' ? 'rtl' : 'ltr';
+      document.documentElement.dir = dir;
+      document.documentElement.lang = STATE.lang === 'fa' ? 'fa' : 'en';
+
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        el.textContent = t(el.dataset.i18n);
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        el.placeholder = t(el.dataset.i18nPlaceholder);
+      });
+      document.querySelectorAll('[data-i18n-opt]').forEach(el => {
+        el.textContent = t(el.dataset.i18nOpt);
+      });
+      document.getElementById('searchInput').placeholder = t('searchPlaceholder');
+      document.getElementById('loadMoreBtn').textContent = t('loadMore');
+
+      // Fix table header alignment for RTL
+      const headers = document.querySelectorAll('.grid-cols-12 .text-right');
+      headers.forEach(h => {
+        h.style.textAlign = dir === 'rtl' ? 'left' : 'right';
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    //  THEME
+    // ═══════════════════════════════════════════════
+
+    function applyTheme() {
+      document.documentElement.dataset.theme = STATE.theme;
+      document.getElementById('themeIcon').textContent = STATE.theme === 'dark' ? '🌙' : '☀️';
+    }
+
+    // ═══════════════════════════════════════════════
+    //  FORMAT HELPERS
+    // ═══════════════════════════════════════════════
+
+    function formatPrice(val, quote) {
+      if (!val) return '—';
+      const num = parseFloat(val);
+      if (isNaN(num)) return '—';
+      if (quote === 'IRT') {
+        return new Intl.NumberFormat(STATE.lang === 'fa' ? 'fa-IR' : 'en-US').format(Math.round(num));
+      }
+      // USDT
+      if (num < 0.0001) return num.toFixed(8);
+      if (num < 1) return num.toFixed(6);
+      if (num < 100) return num.toFixed(2);
+      return new Intl.NumberFormat(STATE.lang === 'fa' ? 'fa-IR' : 'en-US', {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+      }).format(num);
+    }
+
+    function formatPercent(val) {
+      if (val === undefined || val === null) return '—';
+      const num = parseFloat(val);
+      if (isNaN(num)) return '—';
+      return (num >= 0 ? '+' : '') + num.toFixed(2) + '%';
+    }
+
+    function getQuoteData(item) {
+      return STATE.quote === 'IRT' ? item.irt : item.usdt;
+    }
+
+    // ═══════════════════════════════════════════════
+    //  FETCH DATA
+    // ═══════════════════════════════════════════════
+
+    async function fetchData() {
+      try {
+        const res = await fetch('https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        return json.currencies || {};
+      } catch (err) {
+        console.error('Fetch error:', err);
+        return null;
+      }
+    }
+
+    function processData(raw) {
+      const list = [];
+      for (const [symbol, quotes] of Object.entries(raw)) {
+        const name = symbol.replace('_', ' ');
+        const irt = quotes.IRT ? {
+          price: quotes.IRT.price,
+          high_24: quotes.IRT.high_24,
+          low_24: quotes.IRT.low_24,
+          change: quotes.IRT.change_percent_24,
+        } : null;
+        const usdt = quotes.USDT ? {
+          price: quotes.USDT.price,
+          high_24: quotes.USDT.high_24,
+          low_24: quotes.USDT.low_24,
+          change: quotes.USDT.change_percent_24,
+        } : null;
+        list.push({ symbol, name, irt, usdt });
+      }
+      return list;
+    }
+
+    function updatePriceHistory(list) {
+      for (const item of list) {
+        const q = getQuoteData(item);
+        if (!q) continue;
+        if (!STATE.priceHistory[item.symbol]) STATE.priceHistory[item.symbol] = [];
+        STATE.priceHistory[item.symbol].push(parseFloat(q.price));
+        // Keep max 20 points
+        if (STATE.priceHistory[item.symbol].length > 20) {
+          STATE.priceHistory[item.symbol].shift();
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    //  SPARKLINE RENDERING
+    // ═══════════════════════════════════════════════
+
+    function drawSparkline(canvas, data, isPositive) {
+      if (!canvas || !data || data.length < 2) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const min = Math.min(...data);
+      const max = Math.max(...data);
+      const range = max - min || 1;
+
+      const pts = data.map((v, i) => ({
+        x: (i / (data.length - 1)) * w,
+        y: h - ((v - min) / range) * (h - 4) - 2,
+      }));
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      ctx.strokeStyle = isPositive ? '#22c55e' : '#ef4444';
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // subtle fill
+      ctx.lineTo(pts[pts.length - 1].x, h);
+      ctx.lineTo(pts[0].x, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      const c = isPositive ? '34,197,94' : '239,68,68';
+      grad.addColorStop(0, `rgba(${c},0.2)`);
+      grad.addColorStop(1, `rgba(${c},0)`);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    // ═══════════════════════════════════════════════
+    //  RENDER TABLE
+    // ═══════════════════════════════════════════════
+
+    function render() {
+      const { list, search, sort, quote, favorites, favFilter, page, pageSize } = STATE;
+
+      // Filter by search
+      let filtered = list;
+      if (search) {
+        const s = search.toLowerCase();
+        filtered = list.filter(item =>
+          item.symbol.toLowerCase().includes(s) || item.name.toLowerCase().includes(s)
+        );
+      }
+
+      // Filter favorites
+      if (favFilter) {
+        filtered = filtered.filter(item => favorites.includes(item.symbol));
+      }
+
+      // Sort
+      const q = quote;
+      filtered.sort((a, b) => {
+        const aq = q === 'IRT' ? a.irt : a.usdt;
+        const bq = q === 'IRT' ? b.irt : b.usdt;
+        switch (sort) {
+          case 'name':
+            return a.symbol.localeCompare(b.symbol);
+          case 'price':
+            return (parseFloat(bq?.price || 0)) - (parseFloat(aq?.price || 0));
+          case 'change':
+            return (parseFloat(bq?.change || 0)) - (parseFloat(aq?.change || 0));
+          default:
+            return 0;
+        }
+      });
+
+      // Paginate
+      const start = 0;
+      const end = (page + 1) * pageSize;
+      const pageItems = filtered.slice(start, end);
+
+      STATE.displayed = pageItems;
+      STATE.filteredTotal = filtered.length;
+
+      // Stats
+      document.getElementById('statTotal').textContent = list.length;
+      const gainer = findExtreme(filtered, q, true);
+      const loser = findExtreme(filtered, q, false);
+      document.getElementById('statGainer').textContent = gainer ? gainer.symbol : '—';
+      document.getElementById('statLoser').textContent = loser ? loser.symbol : '—';
+      document.getElementById('statUpdated').textContent = new Date().toLocaleTimeString();
+
+      // Table body
+      const tbody = document.getElementById('tableBody');
+      if (pageItems.length === 0) {
+        tbody.innerHTML = `<div class="px-6 py-8 text-center" style="color:var(--text-dim);">${t('noResults')}</div>`;
+        document.getElementById('loadMoreWrap').classList.add('hidden');
+        return;
+      }
+
+      let html = '';
+      for (let i = 0; i < pageItems.length; i++) {
+        const item = pageItems[i];
+        const qd = getQuoteData(item);
+        const isFav = favorites.includes(item.symbol);
+        const priceChange = qd ? parseFloat(qd.change) : 0;
+        const isPositive = priceChange >= 0;
+        const sparkId = `spk_${item.symbol.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        html += `
+          <div class="currency-row grid grid-cols-12 gap-2 px-4 sm:px-6 py-3 items-center animate-in stagger-${Math.min(i % 3 + 1, 3)}" style="border-bottom:1px solid var(--border);" data-symbol="${item.symbol}">
+            <div class="col-span-1 text-center">
+              <button class="fav-btn text-sm transition-all ${isFav ? 'opacity-100' : 'opacity-30 hover:opacity-60'}" data-symbol="${item.symbol}" style="color:${isFav ? 'var(--accent)' : 'var(--text-dim)'};">${isFav ? '★' : '☆'}</button>
+            </div>
+            <div class="col-span-3 sm:col-span-2 flex items-center gap-2">
+              <span class="font-semibold text-sm">${item.symbol}</span>
+            </div>
+            <div class="col-span-4 sm:col-span-3 text-right font-mono text-sm font-medium price-cell" data-price="${qd?.price || ''}">
+              ${qd ? formatPrice(qd.price, quote) : '—'}
+            </div>
+            <div class="hidden sm:block sm:col-span-2 text-right text-sm" style="color:var(--text-muted);">
+              ${qd ? formatPrice(qd.high_24, quote) : '—'}
+            </div>
+            <div class="hidden sm:block sm:col-span-2 text-right text-sm" style="color:var(--text-muted);">
+              ${qd ? formatPrice(qd.low_24, quote) : '—'}
+            </div>
+            <div class="col-span-4 sm:col-span-2 flex items-center justify-end gap-2">
+              <span class="text-sm font-medium" style="color:${qd ? (isPositive ? 'var(--green)' : 'var(--red)') : 'var(--text-dim)'};">${qd ? formatPercent(qd.change) : '—'}</span>
+              <canvas class="sparkline hidden sm:block" id="${sparkId}" width="120" height="32"></canvas>
+            </div>
+          </div>`;
+      }
+
+      tbody.innerHTML = html;
+
+      // Draw sparklines
+      requestAnimationFrame(() => {
+        for (const item of pageItems) {
+          const canvas = document.getElementById(`spk_${item.symbol.replace(/[^a-zA-Z0-9]/g, '_')}`);
+          if (canvas) {
+            const hist = STATE.priceHistory[item.symbol];
+            const qd = getQuoteData(item);
+            const isPos = qd ? parseFloat(qd.change) >= 0 : true;
+            if (hist && hist.length >= 2) {
+              drawSparkline(canvas, hist, isPos);
+            } else if (qd) {
+              // Create a flat-ish spark from available data
+              drawSparkline(canvas, [parseFloat(qd.price) * 0.99, parseFloat(qd.price), parseFloat(qd.price) * 1.005], isPos);
+            }
+          }
+        }
+      });
+
+      // Show/hide load more
+      const wrap = document.getElementById('loadMoreWrap');
+      if (end < filtered.length) {
+        wrap.classList.remove('hidden');
+      } else {
+        wrap.classList.add('hidden');
+      }
+    }
+
+    function findExtreme(list, quote, max) {
+      let best = null, bestVal = 0;
+      for (const item of list) {
+        const qd = quote === 'IRT' ? item.irt : item.usdt;
+        if (!qd) continue;
+        const v = parseFloat(qd.change);
+        if (isNaN(v)) continue;
+        if (best === null || (max ? v > bestVal : v < bestVal)) {
+          best = item;
+          bestVal = v;
+        }
+      }
+      return best;
+    }
+
+    // ═══════════════════════════════════════════════
+    //  MAIN LOOP
+    // ═══════════════════════════════════════════════
+
+    async function refresh() {
+      const raw = await fetchData();
+      if (!raw) {
+        // Show error on existing rows
+        return;
+      }
+      STATE.currencies = raw;
+      STATE.list = processData(raw);
+      updatePriceHistory(STATE.list);
+      render();
+    }
+
+    async function init() {
+      // Apply saved state
+      applyLang();
+      applyTheme();
+      document.getElementById('quoteToggle').textContent = STATE.quote === 'USDT' ? 'USDT / IRT' : 'IRT / USDT';
+
+      // Show loading state
+      document.getElementById('tableBody').innerHTML =
+        `<div class="px-6 py-4"><div class="skeleton h-6 w-full mb-2"></div><div class="skeleton h-6 w-full mb-2"></div><div class="skeleton h-6 w-3/4"></div></div>`;
+
+      await refresh();
+
+      // Auto-refresh every 10 seconds
+      STATE.intervalId = setInterval(refresh, 10000);
+
+      // Setup event listeners
+      setupListeners();
+    }
+
+    // ═══════════════════════════════════════════════
+    //  EVENT LISTENERS
+    // ═══════════════════════════════════════════════
+
+    function setupListeners() {
+      // Search
+      let searchTimer;
+      document.getElementById('searchInput').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          STATE.search = e.target.value;
+          STATE.page = 0;
+          render();
+        }, 250);
+      });
+
+      // Sort
+      document.getElementById('sortSelect').addEventListener('change', (e) => {
+        STATE.sort = e.target.value;
+        STATE.page = 0;
+        render();
+      });
+
+      // Language toggle
+      document.getElementById('langToggle').addEventListener('click', () => {
+        STATE.lang = STATE.lang === 'en' ? 'fa' : 'en';
+        localStorage.setItem('td_lang', STATE.lang);
+        applyLang();
+        render();
+      });
+
+      // Theme toggle
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        STATE.theme = STATE.theme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('td_theme', STATE.theme);
+        applyTheme();
+      });
+
+      // Quote toggle
+      document.getElementById('quoteToggle').addEventListener('click', () => {
+        STATE.quote = STATE.quote === 'USDT' ? 'IRT' : 'USDT';
+        document.getElementById('quoteToggle').textContent = STATE.quote === 'USDT' ? 'USDT / IRT' : 'IRT / USDT';
+        STATE.page = 0;
+        render();
+      });
+
+      // Favorites filter
+      document.getElementById('favFilter').addEventListener('click', () => {
+        STATE.favFilter = !STATE.favFilter;
+        document.getElementById('favFilterIcon').textContent = STATE.favFilter ? '★' : '☆';
+        STATE.page = 0;
+        render();
+      });
+
+      // Refresh button
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        refresh();
+      });
+
+      // Load more
+      document.getElementById('loadMoreBtn').addEventListener('click', () => {
+        STATE.page++;
+        render();
+      });
+
+      // Favorites via delegation
+      document.getElementById('tableBody').addEventListener('click', (e) => {
+        const btn = e.target.closest('.fav-btn');
+        if (!btn) return;
+        const symbol = btn.dataset.symbol;
+        const idx = STATE.favorites.indexOf(symbol);
+        if (idx >= 0) {
+          STATE.favorites.splice(idx, 1);
+        } else {
+          STATE.favorites.push(symbol);
+        }
+        localStorage.setItem('td_fav', JSON.stringify(STATE.favorites));
+        render();
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    //  START
+    // ═══════════════════════════════════════════════
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
