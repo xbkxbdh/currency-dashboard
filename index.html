@@ -387,24 +387,29 @@
     // ═══════════════════════════════════════════════
 
     async function fetchData() {
-      // Fetch from GitHub-hosted data.json (no CORS issues)
+      const ts = Date.now();
       const urls = [
-        'data.json',
-        'https://raw.githubusercontent.com/xbkxbdh/currency-dashboard/main/data.json',
+        'data.json?_=' + ts,
+        'https://corsproxy.org/?https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/',
         'https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/',
       ];
 
       for (const url of urls) {
         try {
-          const res = await fetch(url);
-          if (!res.ok) continue;
-          const json = await res.json();
-          // data.json wraps in { currencies: {...} }, direct API too
+          console.log('Fetching:', url.slice(0, 60));
+          const res = await fetch(url, { mode: 'cors' });
+          if (!res.ok) { console.log('HTTP', res.status); continue; }
+          const text = await res.text();
+          if (text.length < 100) { console.log('Too short, skip'); continue; }
+          const json = JSON.parse(text);
           const data = json.currencies || json;
           STATE.timestamp = json.timestamp || null;
-          if (data && Object.keys(data).length > 0) return data;
+          if (data && Object.keys(data).length > 0) {
+            console.log('Loaded', Object.keys(data).length, 'currencies');
+            return data;
+          }
         } catch (e) {
-          console.log('Attempt failed:', url.split('?')[0].slice(0, 40));
+          console.log('Fetch error:', e.message);
         }
       }
 
@@ -413,7 +418,7 @@
         tbody.innerHTML = `<div class="px-6 py-8 text-center" style="color:var(--red);">
           <div class="text-lg mb-2">⚠️</div>
           <div>${t('error')}</div>
-          <div class="text-xs mt-2" style="color:var(--text-dim);">Waiting for data to sync via GitHub Actions...</div>
+          <div class="text-xs mt-2" style="color:var(--text-dim);" id="errDetail">Open DevTools Console (F12) for details</div>
         </div>`;
       }
       return null;
