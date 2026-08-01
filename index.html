@@ -397,7 +397,7 @@
       for (const url of urls) {
         try {
           console.log('Fetching:', url.slice(0, 60));
-          const res = await fetch(url, { mode: 'cors' });
+          const res = await fetch(url);
           if (!res.ok) { console.log('HTTP', res.status); continue; }
           const text = await res.text();
           if (text.length < 100) { console.log('Too short, skip'); continue; }
