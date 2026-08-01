@@ -375,38 +375,32 @@
     // ═══════════════════════════════════════════════
 
     async function fetchData() {
-      try {
-        // Use CORS proxy since the API doesn't send Access-Control-Allow-Origin
-        const proxy = 'https://api.allorigins.win/raw?url=';
-        const target = 'https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/';
-        const res = await fetch(proxy + encodeURIComponent(target));
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        STATE.timestamp = json.timestamp || null;
-        return json.currencies || {};
-      } catch (err) {
-        console.error('Fetch error:', err);
-        // Fallback: try without proxy (in case CORS changes)
+      // Try direct first, then CORS proxy
+      const direct = 'https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/';
+      const proxy = 'https://corsproxy.org/?url=';
+
+      for (const url of [direct, proxy + encodeURIComponent(direct)]) {
         try {
-          const res2 = await fetch('https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/');
-          if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
-          const json2 = await res2.json();
-          STATE.timestamp = json2.timestamp || null;
-          return json2.currencies || {};
-        } catch (err2) {
-          console.error('Fetch error (fallback):', err2);
-          // Show error in table
-          const tbody = document.getElementById('tableBody');
-          if (tbody) {
-            tbody.innerHTML = `<div class="px-6 py-8 text-center" style="color:var(--red);">
-              <div class="text-lg mb-2">⚠️</div>
-              <div>${t('error')}. CORS proxy unavailable.</div>
-              <div class="text-xs mt-2" style="color:var(--text-dim);">Try opening the page via localhost or a browser extension.</div>
-            </div>`;
-          }
-          return null;
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const json = await res.json();
+          STATE.timestamp = json.timestamp || null;
+          return json.currencies || {};
+        } catch (e) {
+          console.log('Attempt failed:', url.split('?')[0].slice(0, 30) + '...');
         }
       }
+
+      // Both failed
+      const tbody = document.getElementById('tableBody');
+      if (tbody) {
+        tbody.innerHTML = `<div class="px-6 py-8 text-center" style="color:var(--red);">
+          <div class="text-lg mb-2">⚠️</div>
+          <div>${t('error')}</div>
+          <div class="text-xs mt-2" style="color:var(--text-dim);">Install "CORS Unblock" browser extension, or try a different network.</div>
+        </div>`;
+      }
+      return null;
     }
 
     function processData(raw) {
