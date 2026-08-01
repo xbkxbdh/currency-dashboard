@@ -250,6 +250,7 @@
       favFilter: false,
       priceHistory: {},     // symbol -> [prices] for sparklines
       intervalId: null,
+      timestamp: null,      // from API
     };
 
     // ═══════════════════════════════════════════════
@@ -375,13 +376,36 @@
 
     async function fetchData() {
       try {
-        const res = await fetch('https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/');
+        // Use CORS proxy since the API doesn't send Access-Control-Allow-Origin
+        const proxy = 'https://api.allorigins.win/raw?url=';
+        const target = 'https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/';
+        const res = await fetch(proxy + encodeURIComponent(target));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
+        STATE.timestamp = json.timestamp || null;
         return json.currencies || {};
       } catch (err) {
         console.error('Fetch error:', err);
-        return null;
+        // Fallback: try without proxy (in case CORS changes)
+        try {
+          const res2 = await fetch('https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/');
+          if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+          const json2 = await res2.json();
+          STATE.timestamp = json2.timestamp || null;
+          return json2.currencies || {};
+        } catch (err2) {
+          console.error('Fetch error (fallback):', err2);
+          // Show error in table
+          const tbody = document.getElementById('tableBody');
+          if (tbody) {
+            tbody.innerHTML = `<div class="px-6 py-8 text-center" style="color:var(--red);">
+              <div class="text-lg mb-2">⚠️</div>
+              <div>${t('error')}. CORS proxy unavailable.</div>
+              <div class="text-xs mt-2" style="color:var(--text-dim);">Try opening the page via localhost or a browser extension.</div>
+            </div>`;
+          }
+          return null;
+        }
       }
     }
 
@@ -513,7 +537,9 @@
       const loser = findExtreme(filtered, q, false);
       document.getElementById('statGainer').textContent = gainer ? gainer.symbol : '—';
       document.getElementById('statLoser').textContent = loser ? loser.symbol : '—';
-      document.getElementById('statUpdated').textContent = new Date().toLocaleTimeString();
+      document.getElementById('statUpdated').textContent = STATE.timestamp
+        ? new Date(STATE.timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString();
 
       // Table body
       const tbody = document.getElementById('tableBody');
